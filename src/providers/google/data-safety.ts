@@ -70,7 +70,8 @@ export function buildDataSafetyCsv(spec: DataSafetySpec): string {
     if (q.startsWith("PSL_DATA_TYPES_")) return types[r] ? "true" : "";
     if (q === "PSL_SUPPORTED_ACCOUNT_CREATION_METHODS") return (acc.creationMethods ?? ["PSL_ACM_NONE"]).includes(r) ? "true" : "";
     if (q === "PSL_ACM_SPECIFY") return acc.creationMethods?.includes("PSL_ACM_OTHER") ? acc.creationOther ?? "" : "";
-    if (q === "PSL_ACCOUNT_DELETION_URL") return acc.deletionUrl ?? "";
+    // Sin creación de cuentas en la app, Google no admite la URL de borrado de cuenta.
+    if (q === "PSL_ACCOUNT_DELETION_URL") return (acc.creationMethods ?? ["PSL_ACM_NONE"]).includes("PSL_ACM_NONE") ? "" : acc.deletionUrl ?? "";
     if (q === "PSL_SUPPORT_DATA_DELETION_BY_USER") return r === (spec.deletionRequest ? "DATA_DELETION_YES" : "DATA_DELETION_NO") ? "true" : "";
     if (q === "PSL_DATA_DELETION_URL") return spec.dataDeletionUrl ?? "";
     // Google solo admite esta pregunta cuando la app no permite crear cuentas.
