@@ -35,13 +35,15 @@ export async function updateListing(
     video?: string;
   },
 ) {
-  const res = await client.api.edits.listings.update({
-    packageName,
-    editId,
-    language,
-    requestBody: listing,
-  });
-  return res.data;
+  // patch: solo cambia los campos enviados (update/PUT borraba título y descripción corta si no venían).
+  try {
+    const res = await client.api.edits.listings.patch({ packageName, editId, language, requestBody: listing });
+    return res.data;
+  } catch (err) {
+    if ((err as { code?: number }).code !== 404) throw err;
+    const res = await client.api.edits.listings.update({ packageName, editId, language, requestBody: listing });
+    return res.data;
+  }
 }
 
 export async function createListing(
