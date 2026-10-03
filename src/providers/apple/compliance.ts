@@ -205,7 +205,7 @@ export async function getSubmissionReadiness(
           localization.id,
         );
         const displayType =
-          options.screenshotDisplayType ?? "APP_IPHONE_65";
+          options.screenshotDisplayType ?? "APP_IPHONE_67";
         const set = sets.data?.find(
           (s) => s.attributes.screenshotDisplayType === displayType,
         );
@@ -244,6 +244,54 @@ export async function getSubmissionReadiness(
       });
     }
   }
+
+  // Disponibilidad por países (sin ella la app aprobada no aparece en ninguna tienda).
+  try {
+    await client.get(`/v1/apps/${options.appId}/appAvailabilityV2`);
+    checks.push({ code: "AVAILABILITY", status: "ok", message: "Territory availability configured" });
+  } catch {
+    checks.push({
+      code: "AVAILABILITY",
+      status: "missing",
+      message: "No territory availability: the app would not be available in any country",
+      suggestion: "Use apple_set_app_availability (all territories, optionally excluding some).",
+    });
+  }
+
+  // Datos para el equipo de revisión de Apple.
+  try {
+    const review = (await client.get(`/v1/appStoreVersions/${options.versionId}/appStoreReviewDetail`)) as {
+      data?: { attributes?: Record<string, unknown> } | null;
+    };
+    const a = review.data?.attributes ?? {};
+    const contactOk = Boolean(a.contactFirstName && a.contactLastName && a.contactEmail && a.contactPhone);
+    const demoOk = a.demoAccountRequired !== true || Boolean(a.demoAccountName && a.demoAccountPassword);
+    checks.push(
+      contactOk && demoOk
+        ? { code: "REVIEW_DETAILS", status: "ok", message: "Review contact and demo account set" }
+        : {
+            code: "REVIEW_DETAILS",
+            status: "missing",
+            message: !contactOk ? "Review contact (name, email, phone) incomplete" : "Demo account required but credentials missing",
+            suggestion: "Set appStoreReviewDetail via apple_api_call (PATCH /v1/appStoreReviewDetails/{id}).",
+          },
+    );
+  } catch {
+    checks.push({
+      code: "REVIEW_DETAILS",
+      status: "missing",
+      message: "No App Review details for this version",
+      suggestion: "Create appStoreReviewDetails with contact info (and demo account if login is required).",
+    });
+  }
+
+  // App Privacy no tiene API pública: se recuerda verificarla en la web.
+  checks.push({
+    code: "APP_PRIVACY",
+    status: "warning",
+    message: "App Privacy (data usage) can't be read via the public API — confirm it's published in App Store Connect",
+    suggestion: "fastlane upload_app_privacy_details_to_app_store (Apple ID session) or App Store Connect → App Privacy.",
+  });
 
   const ready = !checks.some((c) => c.status === "missing");
   return { ready, checks };

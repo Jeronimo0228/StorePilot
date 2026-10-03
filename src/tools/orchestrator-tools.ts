@@ -11,6 +11,7 @@ import {
   listRegisteredProjects,
   resolveStoreIds,
 } from "../core/project-profile.js";
+import { getProjectSession } from "../core/project-session.js";
 import {
   buildReleaseSnapshot,
   explainBlockers,
@@ -40,11 +41,9 @@ const dryRunSchema = z
     "When true (default), returns the execution plan without changing stores. Set false with confirm: true to execute.",
   );
 
-function resolveProfile(config: Config, configPath?: string) {
-  return (
-    config.projectProfile ??
-    loadProjectProfile(configPath ?? process.env.STOREPILOT_CONFIG_PATH)
-  );
+function resolveProfile(_config: Config, configPath?: string) {
+  const session = getProjectSession();
+  return session.resolveForTool({ configPath }) ?? session.getActive();
 }
 
 export function registerOrchestratorTools(
@@ -55,7 +54,7 @@ export function registerOrchestratorTools(
 ) {
   tool.tool(
     "load_project",
-    "Load storepilot.yaml project profile and persisted release memory from .storepilot/memory.json",
+    "Load storepilot.yaml project profile and persisted release memory from .storepilot/memory.json. Sets it as the active multi-project session.",
     {
       configPath: z
         .string()
@@ -71,8 +70,77 @@ export function registerOrchestratorTools(
             "No storepilot.yaml found. Copy storepilot.example.yaml and set stores.ios.appId / stores.android.package.",
         });
       }
+      getProjectSession().setActive(profile);
       const memory = loadProjectMemory(profile);
-      return toolSuccess({ loaded: true, profile, memory });
+      return toolSuccess({ loaded: true, profile, memory, active: true });
+    },
+    { categories: ["read", "release"] },
+  );
+
+  tool.tool(
+    "select_project",
+    "Select the active StorePilot project for this MCP session. Match by project slug, display name, Android package, Apple appId, or config path. All subsequent tools auto-fill appId/packageName from this project.",
+    {
+      query: z
+        .string()
+        .describe(
+          "Project slug, app name, package name, Apple appId, or path to storepilot.yaml",
+        ),
+    },
+    async ({ query }) => {
+      const session = getProjectSession();
+      const profile = session.select(query);
+      const memory = loadProjectMemory(profile);
+      return toolSuccess({
+        selected: true,
+        profile,
+        memory,
+        registrySize: session.list().length,
+      });
+    },
+    { categories: ["read", "release"] },
+  );
+
+  tool.tool(
+    "resolve_project",
+    "Resolve which StorePilot project would be used for a given app name/package/appId without changing the active session.",
+    {
+      query: z.string().describe("Project slug, app name, package, or appId"),
+    },
+    async ({ query }) => {
+      const profile = getProjectSession().resolve(query);
+      return toolSuccess({
+        project: profile.project,
+        name: profile.name,
+        configPath: profile.configPath,
+        iosAppId: profile.stores?.ios?.appId,
+        androidPackage: profile.stores?.android?.package,
+      });
+    },
+    { categories: ["read", "release"] },
+  );
+
+  tool.tool(
+    "get_active_project",
+    "Return the currently active StorePilot project for this MCP session (used when tools omit appId/packageName).",
+    {},
+    async () => {
+      const session = getProjectSession();
+      const profile = session.getActive();
+      if (!profile) {
+        return toolSuccess({
+          active: false,
+          registry: session.list(),
+          message:
+            "No active project. Call select_project or list_projects, or set STOREPILOT_CONFIG_PATH / STOREPILOT_PROJECTS.",
+        });
+      }
+      return toolSuccess({
+        active: true,
+        profile,
+        memory: loadProjectMemory(profile),
+        registry: session.list(),
+      });
     },
     { categories: ["read", "release"] },
   );
@@ -271,8 +339,30 @@ export function registerOrchestratorTools(
   );
 
   tool.tool(
+    "render_store_screenshots",
+    "Compose store screenshots from raw app captures: device frames (iPhone 6.9\", iPad 13\", Android 1080x1920), brand backgrounds and localized headlines, plus the Play feature graphic. Reads a store-shots JSON config (see scripts/store-shots). Output PNGs are RGB (no alpha) and sized for App Store Connect / Google Play.",
+    {
+      shotsConfig: z.string().describe("Absolute path to the store-shots config JSON"),
+      only: z.array(z.enum(["ios", "ipad", "android", "feature"])).optional().describe("Targets to render (default: all configured)"),
+      slides: z.array(z.string()).optional().describe("Slide ids to render (default: all)"),
+    },
+    async ({ shotsConfig, only, slides }) => {
+      const { execFile } = await import("node:child_process");
+      const { fileURLToPath } = await import("node:url");
+      const script = fileURLToPath(new URL("../scripts/store-shots/render.mjs", import.meta.url));
+      const args = [script, shotsConfig, ...(only?.length ? ["--only", only.join(",")] : []), ...(slides?.length ? ["--slides", slides.join(",")] : [])];
+      const output = await new Promise<string>((resolve, reject) =>
+        execFile("node", args, { timeout: 20 * 60_000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) =>
+          err ? reject(new Error(stderr || err.message)) : resolve(stdout.trim()),
+        ),
+      );
+      return toolSuccess({ output });
+    },
+  );
+
+  tool.tool(
     "list_projects",
-    "List StorePilot projects from STOREPILOT_PROJECTS_DIR, ~/.config/storepilot/projects, and cwd discovery",
+    "List all StorePilot projects from STOREPILOT_PROJECTS, STOREPILOT_PROJECTS_DIR, ~/.config/storepilot/projects, and STOREPILOT_CONFIG_PATH / cwd. Use select_project(query) to switch active app.",
     {
       configPath: z
         .string()
@@ -280,10 +370,19 @@ export function registerOrchestratorTools(
         .describe("Optional cwd hint for discovering storepilot.yaml"),
     },
     async ({ configPath }) => {
+      const session = getProjectSession();
+      // Force reload including optional cwd hint
       const projects = listRegisteredProjects(
         configPath ? dirname(configPath) : process.cwd(),
       );
-      return toolSuccess({ count: projects.length, projects });
+      session.reload();
+      const active = session.getActive();
+      return toolSuccess({
+        count: projects.length,
+        projects,
+        activeProject: active?.project ?? null,
+        hint: "Pass project: \"my-app\" on any tool, or call select_project, to target an app by name.",
+      });
     },
     { categories: ["read", "release"] },
   );

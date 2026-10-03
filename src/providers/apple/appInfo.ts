@@ -86,12 +86,41 @@ export async function listTerritories(client: AppleClient) {
   });
 }
 
-export async function getAppAvailability(
+export async function getAppAvailability(client: AppleClient, appId: string) {
+  // v1 /appAvailability fue retirado por Apple: v2 con los territorios incluidos.
+  return client.get(`/v1/apps/${appId}/appAvailabilityV2`, {
+    include: "territoryAvailabilities",
+    "limit[territoryAvailabilities]": "200",
+  });
+}
+
+/**
+ * Crea la disponibilidad v2 de la app: todos los territorios disponibles salvo `exclude`
+ * (p. ej. CHN, que exige licencia ICP). Apple exige incluir cada territorio en la petición.
+ */
+export async function setAppAvailability(
   client: AppleClient,
   appId: string,
+  options: { exclude?: string[]; availableInNewTerritories?: boolean } = {},
 ) {
-  return client.get(`/v1/apps/${appId}/appAvailability`, {
-    include: "availableTerritories",
+  const territories = (await client.getAll<{ id: string }>("/v1/territories", { limit: "200" })) as Array<{ id: string }>;
+  const exclude = new Set((options.exclude ?? ["CHN"]).map((t) => t.toUpperCase()));
+  const included = territories.map((t, i) => ({
+    type: "territoryAvailabilities",
+    id: `\${t${i}}`,
+    attributes: { available: !exclude.has(t.id) },
+    relationships: { territory: { data: { type: "territories", id: t.id } } },
+  }));
+  return client.post("/v2/appAvailabilities", {
+    data: {
+      type: "appAvailabilities",
+      attributes: { availableInNewTerritories: options.availableInNewTerritories ?? true },
+      relationships: {
+        app: { data: { type: "apps", id: appId } },
+        territoryAvailabilities: { data: included.map((x) => ({ type: x.type, id: x.id })) },
+      },
+    },
+    included,
   });
 }
 

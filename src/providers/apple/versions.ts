@@ -28,7 +28,8 @@ export async function getAppStoreVersion(
 ) {
   return client.get(`/v1/appStoreVersions/${versionId}`, {
     "fields[appStoreVersions]":
-      "versionString,appStoreState,releaseType,earliestReleaseDate,platform",
+      // Las relaciones deben estar en el sparse fieldset o Apple las omite (antes: "sin build" falso).
+      "versionString,appStoreState,releaseType,earliestReleaseDate,platform,build,appStoreVersionLocalizations,appStoreVersionSubmission",
     include:
       "appStoreVersionLocalizations,build,appStoreVersionSubmission",
   });

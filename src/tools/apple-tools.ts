@@ -17,11 +17,13 @@ import * as customerReviews from "../providers/apple/customerReviews.js";
 import * as appInfo from "../providers/apple/appInfo.js";
 import * as compliance from "../providers/apple/compliance.js";
 import * as screenshots from "../providers/apple/screenshots.js";
+import { APPLE_ASC_API_CATALOG } from "../providers/apple/api-catalog.js";
 import { toolSuccess } from "../utils/tool-registry.js";
 import { assertReadableAssetPath } from "../utils/asset-paths.js";
 
 const screenshotDisplayTypeSchema = z.enum([
-  "APP_IPHONE_65",
+  "APP_IPHONE_67",
+        "APP_IPHONE_65",
   "APP_IPHONE_61",
   "APP_IPHONE_58",
   "APP_IPHONE_55",
@@ -924,6 +926,20 @@ export function registerAppleTools(tool: ToolRegistrar, client: AppleClient) {
   );
 
   tool.tool(
+    "apple_set_app_availability",
+    "Make the app available in all App Store territories (optionally excluding some, default CHN) and in new territories. Without availability an approved app is not sold anywhere.",
+    {
+      appId: z.string().describe("The App Store Connect app ID"),
+      exclude: z.array(z.string()).optional().describe("Territory codes to exclude (default [\"CHN\"])"),
+      availableInNewTerritories: z.boolean().optional().describe("Auto-enable future territories (default true)"),
+    },
+    async ({ appId, exclude, availableInNewTerritories }) => {
+      const result = await appInfo.setAppAvailability(client, appId, { exclude, availableInNewTerritories });
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  tool.tool(
     "apple_set_phased_release",
     "Configure phased release for an App Store version (gradual rollout over 7 days)",
     {
@@ -1209,6 +1225,41 @@ export function registerAppleTools(tool: ToolRegistrar, client: AppleClient) {
       });
       return toolSuccess(result);
     },
+    { categories: ["read", "release"] },
+  );
+
+  tool.tool(
+    "apple_list_api_catalog",
+    "Catalog of App Store Connect API endpoints by category. Use apple_api_call for any /v1 or /v2 path not covered by a typed tool — this is how agents reach 100% of ASC REST.",
+    {},
+    async () => toolSuccess(APPLE_ASC_API_CATALOG),
+    { categories: ["read"] },
+  );
+
+  tool.tool(
+    "apple_get_first_launch_checklist",
+    "First App Store submission checklist: API steps vs Transporter/UI-only items (IPA upload, agreements, full privacy nutrition labels).",
+    {
+      appId: z.string().optional().describe("Apple app ID (uses active project if omitted)"),
+    },
+    async ({ appId }) =>
+      toolSuccess({
+        appId: appId ?? null,
+        apiAutomatable: APPLE_ASC_API_CATALOG.firstLaunchApiSteps,
+        consoleOnlyOrExternal: APPLE_ASC_API_CATALOG.consoleOnlyOrExternal,
+        recommendedToolOrder: [
+          "select_project / project param",
+          "apple_create_app_version",
+          "Upload IPA via EAS/Transporter (not REST)",
+          "apple_assign_build_to_version",
+          "apple_update_app_localizations + apple_set_release_notes",
+          "apple_upload_screenshots",
+          "apple_set_export_compliance + apple_set_content_rights",
+          "apple_update_age_rating + apple_set_app_category",
+          "apple_get_submission_readiness",
+          "apple_submit_for_review",
+        ],
+      }),
     { categories: ["read", "release"] },
   );
 }
