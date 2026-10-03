@@ -90,7 +90,7 @@ export async function getAppAvailability(client: AppleClient, appId: string) {
   // v1 /appAvailability fue retirado por Apple: v2 con los territorios incluidos.
   return client.get(`/v1/apps/${appId}/appAvailabilityV2`, {
     include: "territoryAvailabilities",
-    "limit[territoryAvailabilities]": "200",
+    "limit[territoryAvailabilities]": "50",
   });
 }
 
