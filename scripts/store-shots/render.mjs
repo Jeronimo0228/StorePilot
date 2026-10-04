@@ -250,7 +250,11 @@ async function render(html, W, H, file) {
       await document.fonts.ready;
       await Promise.all([...document.images].map((im) => (im.complete ? 0 : new Promise((r) => { im.onload = im.onerror = r; }))));
       const fams = new Set([...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family.replace(/"/g, "")));
-      return fams.has(head) && fams.has(body) && [...document.images].every((im) => im.naturalWidth > 0);
+      // Un ícono sin ligadura resuelta se ve como su nombre ("trending_up"): ancho mucho mayor que su tamaño.
+      const iconsOk = [...document.querySelectorAll(".material-symbols-rounded")].every(
+        (el) => el.getBoundingClientRect().width <= parseFloat(getComputedStyle(el).fontSize) * 1.6,
+      );
+      return fams.has(head) && fams.has(body) && iconsOk && [...document.images].every((im) => im.naturalWidth > 0);
     }, [B.headFont, B.bodyFont, B.headWeight || 400]);
     if (ok) break;
     if (attempt === 3) throw new Error(`Fuentes o imágenes sin cargar en ${file}`);
