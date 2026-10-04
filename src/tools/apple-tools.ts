@@ -256,19 +256,17 @@ export function registerAppleTools(tool: ToolRegistrar, client: AppleClient) {
 
   tool.tool(
     "apple_set_app_pricing",
-    "Set the pricing tier for an app",
+    "Set the app price (default free) via appPriceSchedules; Apple derives other territories from the base one",
     {
       appId: z.string().describe("The App Store Connect app ID"),
-      priceTier: z
+      customerPrice: z
         .string()
-        .describe("Price tier ID (e.g. '0' for free, '1' for $0.99)"),
+        .default("0")
+        .describe("Customer price in the base territory currency, e.g. '0' (free) or '0.99'"),
+      baseTerritory: z.string().default("USA").describe("Base territory (ISO 3166 alpha-3)"),
     },
-    async ({ appId, priceTier }) => {
-      const result = await submissions.setAppPricing(
-        client,
-        appId,
-        priceTier,
-      );
+    async ({ appId, customerPrice, baseTerritory }) => {
+      const result = await submissions.setAppPricing(client, appId, customerPrice, baseTerritory);
       return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -1131,6 +1129,30 @@ export function registerAppleTools(tool: ToolRegistrar, client: AppleClient) {
         locale,
         screenshotDisplayType,
         filePaths: safePaths,
+      });
+      return toolSuccess(result);
+    },
+    { categories: ["metadata", "release"], destructive: true },
+  );
+
+  tool.tool(
+    "apple_replace_screenshots",
+    "Replace a locale's App Store screenshots: deletes the existing set for that display type (and, with removeOtherSets, every other size so stale screenshots don't keep showing on smaller devices) and uploads the new files in order. Requires confirm: true.",
+    {
+      versionId: z.string().describe("App Store version ID"),
+      locale: z.string().describe("BCP-47 locale"),
+      screenshotDisplayType: screenshotDisplayTypeSchema,
+      filePaths: z.array(z.string()).min(1).max(10).describe("Absolute paths, in display order (max 10)"),
+      removeOtherSets: z.boolean().optional().describe("Also delete sets of other display types (default false)"),
+    },
+    async ({ versionId, locale, screenshotDisplayType, filePaths, removeOtherSets }) => {
+      const safePaths = filePaths.map((p: string) => assertReadableAssetPath(p));
+      const result = await screenshots.replaceScreenshots(client, {
+        versionId,
+        locale,
+        screenshotDisplayType,
+        filePaths: safePaths,
+        removeOtherSets,
       });
       return toolSuccess(result);
     },

@@ -1,18 +1,54 @@
 import type { AppleClient } from "./client.js";
 
-export async function submitForReview(
-  client: AppleClient,
-  versionId: string,
-) {
-  return client.post("/v1/appStoreVersionSubmissions", {
-    data: {
-      type: "appStoreVersionSubmissions",
-      relationships: {
-        appStoreVersion: {
-          data: { type: "appStoreVersions", id: versionId },
+/**
+ * Envía una versión a App Review con el flujo vigente (reviewSubmissions): reutiliza una solicitud
+ * abierta de la app o crea una, agrega la versión como ítem y la marca como enviada.
+ * (appStoreVersionSubmissions ya no admite CREATE.)
+ */
+export async function submitForReview(client: AppleClient, versionId: string) {
+  const version = (await client.get(`/v1/appStoreVersions/${versionId}`, {
+    "fields[appStoreVersions]": "platform,app",
+    include: "app",
+  })) as { data: { attributes?: { platform?: string }; relationships?: { app?: { data?: { id: string } } } } };
+  const appId = version.data.relationships?.app?.data?.id;
+  if (!appId) throw new Error(`No app found for version ${versionId}`);
+  const platform = version.data.attributes?.platform ?? "IOS";
+
+  const open = (await client.get(`/v1/apps/${appId}/reviewSubmissions`, {
+    "filter[state]": "READY_FOR_REVIEW",
+    "filter[platform]": platform,
+  })) as { data?: Array<{ id: string }> };
+  let submissionId = open.data?.[0]?.id;
+  if (!submissionId) {
+    const created = (await client.post("/v1/reviewSubmissions", {
+      data: {
+        type: "reviewSubmissions",
+        attributes: { platform },
+        relationships: { app: { data: { type: "apps", id: appId } } },
+      },
+    })) as { data: { id: string } };
+    submissionId = created.data.id;
+  }
+
+  const items = (await client.get(`/v1/reviewSubmissions/${submissionId}/items`, {
+    include: "appStoreVersion",
+  })) as { data?: Array<{ relationships?: { appStoreVersion?: { data?: { id: string } | null } } }> };
+  const alreadyAdded = items.data?.some((i) => i.relationships?.appStoreVersion?.data?.id === versionId);
+  if (!alreadyAdded) {
+    // Si la versión no es enviable, Apple responde 409 con associatedErrors (privacidad, precio…).
+    await client.post("/v1/reviewSubmissionItems", {
+      data: {
+        type: "reviewSubmissionItems",
+        relationships: {
+          reviewSubmission: { data: { type: "reviewSubmissions", id: submissionId } },
+          appStoreVersion: { data: { type: "appStoreVersions", id: versionId } },
         },
       },
-    },
+    });
+  }
+
+  return client.patch(`/v1/reviewSubmissions/${submissionId}`, {
+    data: { type: "reviewSubmissions", id: submissionId, attributes: { submitted: true } },
   });
 }
 
@@ -39,24 +75,50 @@ export async function getReviewStatus(
   };
 }
 
+/**
+ * Fija el precio de la app (por defecto gratis) con appPriceSchedules: busca el price point del
+ * territorio base cuyo customerPrice coincide y lo programa desde hoy. Apple deriva el resto de países.
+ */
 export async function setAppPricing(
   client: AppleClient,
   appId: string,
-  priceTier: string,
+  customerPrice = "0",
+  baseTerritory = "USA",
 ) {
-  const priceSchedules = await client.get<{
-    data: Array<{ id: string }>;
-  }>(`/v1/apps/${appId}/appPriceSchedule`);
+  const target = Number(customerPrice);
+  let path: string | undefined = `/v1/apps/${appId}/appPricePoints`;
+  let params: Record<string, string> | undefined = {
+    "fields[appPricePoints]": "customerPrice",
+    "filter[territory]": baseTerritory,
+    limit: "200",
+  };
+  let pointId: string | undefined;
+  while (path && !pointId) {
+    const page: { data: Array<{ id: string; attributes?: { customerPrice?: string } }>; links?: { next?: string } } =
+      await client.get(path, params);
+    pointId = page.data.find((p) => Number(p.attributes?.customerPrice) === target)?.id;
+    path = page.links?.next?.replace("https://api.appstoreconnect.apple.com", "");
+    params = undefined;
+  }
+  if (!pointId) throw new Error(`No price point ${customerPrice} in ${baseTerritory} for app ${appId}`);
 
-  return client.post("/v1/appPricePoints", {
+  return client.post("/v1/appPriceSchedules", {
     data: {
-      type: "appPrices",
-      attributes: {},
+      type: "appPriceSchedules",
       relationships: {
         app: { data: { type: "apps", id: appId } },
-        priceTier: { data: { type: "appPriceTiers", id: priceTier } },
+        baseTerritory: { data: { type: "territories", id: baseTerritory } },
+        manualPrices: { data: [{ type: "appPrices", id: "${price0}" }] },
       },
     },
+    included: [
+      {
+        type: "appPrices",
+        id: "${price0}",
+        attributes: { startDate: null },
+        relationships: { appPricePoint: { data: { type: "appPricePoints", id: pointId } } },
+      },
+    ],
   });
 }
 

@@ -269,3 +269,31 @@ export async function uploadScreenshots(
   }
   return results;
 }
+
+/**
+ * Reemplaza las capturas de un idioma: borra el set del tamaño indicado (y, con removeOtherSets,
+ * los de otros tamaños, que Apple seguiría mostrando con capturas viejas) y sube las nuevas en orden.
+ */
+export async function replaceScreenshots(
+  client: AppleClient,
+  options: {
+    versionId: string;
+    locale: string;
+    screenshotDisplayType: ScreenshotDisplayType;
+    filePaths: string[];
+    removeOtherSets?: boolean;
+  },
+) {
+  const localization = await findOrCreateVersionLocalization(client, options.versionId, options.locale);
+  const sets = await listScreenshotSets(client, localization.id);
+  const removed: string[] = [];
+  for (const set of sets.data ?? []) {
+    const type = set.attributes.screenshotDisplayType ?? "";
+    if (type === options.screenshotDisplayType || options.removeOtherSets) {
+      await client.delete(`/v1/appScreenshotSets/${set.id}`);
+      removed.push(type);
+    }
+  }
+  const uploaded = await uploadScreenshots(client, options);
+  return { locale: options.locale, removedSets: removed, uploaded: uploaded.length };
+}

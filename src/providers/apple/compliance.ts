@@ -258,6 +258,22 @@ export async function getSubmissionReadiness(
     });
   }
 
+  // Precio (sin calendario de precios Apple rechaza el envío con APP_PRICING_REQUIRED).
+  try {
+    const prices = (await client.get(`/v1/appPriceSchedules/${options.appId}/manualPrices`, { limit: "1" })) as {
+      data?: unknown[];
+    };
+    if (!prices.data?.length) throw new Error("no manual prices");
+    checks.push({ code: "PRICING", status: "ok", message: "Price schedule configured" });
+  } catch {
+    checks.push({
+      code: "PRICING",
+      status: "missing",
+      message: "No price schedule: Apple blocks the submission (APP_PRICING_REQUIRED)",
+      suggestion: "Use apple_set_app_pricing (customerPrice '0' for a free app).",
+    });
+  }
+
   // Datos para el equipo de revisión de Apple.
   try {
     const review = (await client.get(`/v1/appStoreVersions/${options.versionId}/appStoreReviewDetail`)) as {
