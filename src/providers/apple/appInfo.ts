@@ -162,3 +162,39 @@ export async function setPhasedRelease(
     },
   });
 }
+
+/**
+ * Nombre, subtítulo y URL de privacidad viven en la información de la app (no en la versión).
+ * Edita la appInfo editable (la que no está publicada) y crea la localización si no existe.
+ */
+export async function updateAppInfoLocalization(
+  client: AppleClient,
+  appId: string,
+  locale: string,
+  fields: { name?: string; subtitle?: string; privacyPolicyUrl?: string; privacyChoicesUrl?: string },
+) {
+  const infos = (await client.get(`/v1/apps/${appId}/appInfos`, {
+    "fields[appInfos]": "appStoreState,state",
+  })) as { data: Array<{ id: string; attributes?: { appStoreState?: string; state?: string } }> };
+  const locked = new Set(["READY_FOR_SALE", "READY_FOR_DISTRIBUTION", "REPLACED_WITH_NEW_INFO"]);
+  const info =
+    infos.data.find((i) => !locked.has(i.attributes?.state ?? i.attributes?.appStoreState ?? "")) ?? infos.data[0];
+  if (!info) throw new Error(`No appInfo for app ${appId}`);
+  const locs = (await client.get(`/v1/appInfos/${info.id}/appInfoLocalizations`)) as {
+    data: Array<{ id: string; attributes: { locale: string } }>;
+  };
+  const attributes = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+  const existing = locs.data.find((l) => l.attributes.locale === locale);
+  if (existing) {
+    return client.patch(`/v1/appInfoLocalizations/${existing.id}`, {
+      data: { type: "appInfoLocalizations", id: existing.id, attributes },
+    });
+  }
+  return client.post("/v1/appInfoLocalizations", {
+    data: {
+      type: "appInfoLocalizations",
+      attributes: { locale, ...attributes },
+      relationships: { appInfo: { data: { type: "appInfos", id: info.id } } },
+    },
+  });
+}

@@ -77,13 +77,25 @@ function statusBar(device, dark) {
   return `<div class="sb sb-ios" style="color:${c}"><span class="sb-time">9:41</span><span class="sb-ic">${sig}${wifi}${batt}</span></div>`;
 }
 
+/** alto/ancho leído de la cabecera IHDR de un PNG (null si no existe o no es PNG). */
+function pngAspect(file) {
+  try {
+    const head = fs.readFileSync(file).subarray(0, 24);
+    if (head.toString("latin1", 12, 16) !== "IHDR") return null;
+    return head.readUInt32BE(20) / head.readUInt32BE(16);
+  } catch {
+    return null;
+  }
+}
+
 // Marco del dispositivo con la captura dentro. width = ancho total del cuerpo en px del lienzo.
 function deviceHtml(kind, rawFile, width, screenDark) {
   const g = DEVICES[kind];
   const bez = Math.round(width * g.bezel);
   const screenW = width - 2 * bez;
   const statusH = Math.round(screenW * g.statusRatio);
-  const ratio = cfg.rawAspect?.[kind === "ipad" ? "tablet" : "phone"]; // alto/ancho de la captura cruda
+  // Alto/ancho de la captura cruda: se lee del PNG real para no estirar ni aplastar la interfaz.
+  const ratio = pngAspect(rawFile) || cfg.rawAspect?.[kind === "ipad" ? "tablet" : "phone"];
   const appH = Math.round(screenW * ratio);
   const screenH = statusH + appH;
   const height = screenH + 2 * bez;
@@ -149,8 +161,16 @@ function slideHtml(target, slide, locale) {
   const text = slide.text[locale] || slide.text[cfg.locales[0]];
   const rawFile = `${cfg.raw}/${T.raw}-${cfg.rawLocale?.[locale] || locale}-${slide.raw}.png`;
   const layout = tablet ? "tablet" : slide.layout || "rise";
-  const devW = Math.round(W * (tablet ? 0.8 : layout === "tilt" ? 0.74 : 0.8));
-  const dev = deviceHtml(T.device, rawFile, devW, slide.screen !== "light");
+  let devW = Math.round(W * (tablet ? 0.8 : layout === "tilt" ? 0.74 : 0.8));
+  let dev = deviceHtml(T.device, rawFile, devW, slide.screen !== "light");
+  // "fit": el dispositivo entero (con su barra inferior) cabe bajo el titular, sin cortes.
+  if ((!tablet && slide.layout === "fit") || (tablet && cfg.tabletFit)) {
+    const avail = H - Math.round(H * (tablet ? 0.27 : target === "android" ? 0.3 : 0.29)) - Math.round(H * 0.035);
+    if (dev.height > avail) {
+      devW = Math.floor(devW * (avail / dev.height));
+      dev = deviceHtml(T.device, rawFile, devW, slide.screen !== "light");
+    }
+  }
   const capTop = Math.round(H * (tablet ? 0.06 : 0.065));
   const devTop = Math.round(H * (tablet ? 0.27 : target === "android" ? 0.3 : 0.29));
   const left = Math.round((W - devW) / 2) + (layout === "tilt" ? Math.round(W * (slide.tiltSide === "left" ? -0.04 : 0.04)) : 0);

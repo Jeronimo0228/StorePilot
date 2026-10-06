@@ -52,6 +52,36 @@ export async function submitForReview(client: AppleClient, versionId: string) {
   });
 }
 
+/**
+ * Retira de revisión la versión indicada: cancela la reviewSubmission que la contiene
+ * (estado WAITING_FOR_REVIEW / READY_FOR_REVIEW). La versión vuelve a ser editable.
+ */
+export async function cancelReview(client: AppleClient, versionId: string) {
+  const version = (await client.get(`/v1/appStoreVersions/${versionId}`, {
+    "fields[appStoreVersions]": "app",
+    include: "app",
+  })) as { data: { relationships?: { app?: { data?: { id: string } } } } };
+  const appId = version.data.relationships?.app?.data?.id;
+  if (!appId) throw new Error(`No app found for version ${versionId}`);
+  const subs = (await client.get(`/v1/apps/${appId}/reviewSubmissions`, {
+    "filter[state]": "WAITING_FOR_REVIEW,READY_FOR_REVIEW,UNRESOLVED_ISSUES",
+    include: "items",
+    "fields[reviewSubmissionItems]": "appStoreVersion",
+  })) as { data?: Array<{ id: string; attributes?: { state?: string } }>; included?: Array<{ id: string; relationships?: { appStoreVersion?: { data?: { id: string } | null } } }> };
+  const canceled: string[] = [];
+  for (const sub of subs.data ?? []) {
+    const items = (await client.get(`/v1/reviewSubmissions/${sub.id}/items`, {
+      include: "appStoreVersion",
+    })) as { data?: Array<{ relationships?: { appStoreVersion?: { data?: { id: string } | null } } }> };
+    if (!items.data?.some((i) => i.relationships?.appStoreVersion?.data?.id === versionId)) continue;
+    await client.patch(`/v1/reviewSubmissions/${sub.id}`, {
+      data: { type: "reviewSubmissions", id: sub.id, attributes: { canceled: true } },
+    });
+    canceled.push(sub.id);
+  }
+  return { versionId, canceled };
+}
+
 export async function getReviewStatus(
   client: AppleClient,
   versionId: string,

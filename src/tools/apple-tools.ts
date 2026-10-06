@@ -255,6 +255,35 @@ export function registerAppleTools(tool: ToolRegistrar, client: AppleClient) {
   );
 
   tool.tool(
+    "apple_update_app_info_localization",
+    "Update the app name, subtitle and privacy policy URL for a locale (App Store 'App Information'); creates the localization if missing. Only editable while a version is not in review.",
+    {
+      appId: z.string().describe("The App Store Connect app ID"),
+      locale: z.string().describe("Locale code, e.g. 'es-MX'"),
+      name: z.string().max(30).optional().describe("App name (max 30)"),
+      subtitle: z.string().max(30).optional().describe("Subtitle (max 30)"),
+      privacyPolicyUrl: z.string().url().optional().describe("Privacy policy URL"),
+    },
+    async ({ appId, locale, name, subtitle, privacyPolicyUrl }) => {
+      const result = await appInfo.updateAppInfoLocalization(client, appId, locale, { name, subtitle, privacyPolicyUrl });
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  tool.tool(
+    "apple_cancel_review",
+    "Withdraw an App Store version from App Review (cancels its review submission) so its metadata, screenshots and build can be edited. Requires confirm: true.",
+    {
+      versionId: z.string().describe("The App Store version ID to withdraw"),
+    },
+    async ({ versionId }) => {
+      const result = await submissions.cancelReview(client, versionId);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+    { categories: ["release"], destructive: true },
+  );
+
+  tool.tool(
     "apple_set_app_pricing",
     "Set the app price (default free) via appPriceSchedules; Apple derives other territories from the base one",
     {
