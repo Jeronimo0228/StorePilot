@@ -20,10 +20,12 @@ export async function updateAppDetails(
     defaultLanguage?: string;
   },
 ) {
-  const res = await client.api.edits.details.update({
+  // patch: solo los campos enviados. update reemplazaba todo y dejaba vacío defaultLanguage
+  // ("The default language for your application is not currently supported" al validar).
+  const res = await client.api.edits.details.patch({
     packageName,
     editId,
-    requestBody: details,
+    requestBody: Object.fromEntries(Object.entries(details).filter(([, v]) => v !== undefined)),
   });
   return res.data;
 }
