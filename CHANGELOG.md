@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-10-27
+
+### Added
+
+- **True multi-project MCP session** — `STOREPILOT_PROJECTS` (JSON/CSV paths) + `STOREPILOT_PROJECTS_DIR`; tools `select_project`, `resolve_project`, `get_active_project`
+- **`project` argument on every tool** — resolve app by slug, display name, package, or Apple appId; auto-fills `appId` / `packageName`
+- **Docs:** [`docs/MULTI_PROJECT.md`](docs/MULTI_PROJECT.md)
+- **Full Google Play API catalog** — `google_list_api_catalog` + MCP resource `catalog://google-play` (every androidpublisher v3 method)
+- **Full ASC endpoint catalog** — `apple_list_api_catalog` + `catalog://app-store-connect`
+- **First-launch checklists** — `google_get_first_launch_checklist`, `apple_get_first_launch_checklist` (API vs Console-only)
+- **Google typed tools:** Data Safety, expansion files, orders/refunds, voided purchases, Play users, one-time products, region prices, purchase ack, subscription offers, generated APKs, app recovery, system APKs
+- Expanded `google_api_call` write-method allowlist for monetization, orders, apprecovery, etc.
+
+### Changed
+
+- Active project is session-mutable (no MCP restart to switch apps)
+- Orchestrator `resolveProfile` uses session instead of freezing the startup profile
+- `STOREPILOT_HOME` overrides the base folder (`~/.config/storepilot`) for the project registry
+
+### Fixed
+
+- `google_api_call` rejected camelCase methods (`batchUpdate`, `migratePrices`, `addTargeting`…): resource paths now accept googleapis' camelCase and method allowlists are compared case-insensitively
+- `batchGet` is classified as a read (no `confirm` needed)
+- `apple_upload_screenshots` is destructive again (it replaces existing screenshots)
+- `google_api_call` binds googleapis methods to their resource (`this.context` was undefined)
+- Apple submit uses `reviewSubmissions`; pricing via `appPriceSchedules` (1.1.x hotfixes, now released)
+- `google_update_listing` / `google_update_app_details` use `patch` (`update` wiped fields not sent)
+
 ## [1.1.2] - 2026-08-05
 
 ### Added

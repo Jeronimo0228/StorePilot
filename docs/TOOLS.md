@@ -1,11 +1,16 @@
 # Tools reference
 
-**~131 MCP tools** — iOS (~75), Android (~45), shared (4), **8 orchestrator**, **6 escape/upload**, plus compliance & screenshots.
+**~155+ typed MCP tools** + escape hatches that reach **100% of public store APIs**.
+
+- iOS typed · Android typed · shared · **11 orchestrator** (incl. multi-project) · catalogs · first-launch
+- Every Android Publisher v3 method → `google_list_api_catalog` / `google_api_call`
+- Every ASC `/v1|/v2` path → `apple_list_api_catalog` / `apple_api_call`
+- Multi-project: pass `project: "my-app"` on any tool — see [MULTI_PROJECT.md](./MULTI_PROJECT.md)
 
 > Copy [`storepilot.example.yaml`](../storepilot.example.yaml) → `storepilot.yaml` in your app repo.  
 > Golden path: [DEMO.md](./DEMO.md) · Compare: [COMPARISON.md](./COMPARISON.md)
 
-> Use `MCP_TOOLSET=release` (91 tools) or `readonly`. See [TOOLSETS.md](./TOOLSETS.md).
+> Use `MCP_TOOLSET=all` (default), `release`, or `readonly`. See [TOOLSETS.md](./TOOLSETS.md).
 
 ## Response format
 
@@ -32,17 +37,21 @@ Other destructive tools (no dry-run):
 - `apple_submit_for_review`, `apple_submit_for_beta_review`
 - `apple_delete_*`, `apple_remove_*`, `apple_revoke_*`, `apple_disable_capability`
 - `google_delete_*`, `google_halt_release`, upload tools without dry-run
+- `google_set_data_safety`, `google_refund_order`, `google_create_user`, …
 
 ---
 
-## Orchestrator / StorePilot (8)
+## Orchestrator / StorePilot
 
-High-level release workflows. **`dryRun` defaults to `true`**.
+High-level release workflows. **`dryRun` defaults to `true`** where applicable.
 
 | Tool | Category | Description |
 |---|---|---|
-| `load_project` | read | Load `storepilot.yaml` + `.storepilot/memory.json` |
-| `list_projects` | read | Multi-app registry (`STOREPILOT_PROJECTS_DIR`, `~/.config/storepilot/projects`) |
+| `load_project` | read | Load `storepilot.yaml` + memory; sets active session |
+| `list_projects` | read | Multi-app registry (`STOREPILOT_PROJECTS`, `STOREPILOT_PROJECTS_DIR`, …) |
+| `select_project` | read | Switch active app by slug / name / package / appId |
+| `resolve_project` | read | Resolve without switching session |
+| `get_active_project` | read | Show active project + registry |
 | `get_release_snapshot` | read | Production vs candidate, blockers, next actions |
 | `explain_release_blockers` | read | Human-readable release guidance |
 | `execute_release_intent` | release | Unified intent: `rollout_production`, `promote_to_production`, `submit_for_review`, `configure_rollout` |
@@ -50,10 +59,14 @@ High-level release workflows. **`dryRun` defaults to `true`**.
 | `promote_release` | release | Android track promotion or iOS submit for review |
 | `configure_rollout` | release | Staged rollout % (Android) or phased release (iOS) |
 
-## Escape hatch & uploads (6+)
+## Escape hatch, catalogs & first launch
 
 | Tool | Category | Description |
 |---|---|---|
+| `apple_list_api_catalog` | read | ASC endpoints by category |
+| `apple_get_first_launch_checklist` | read | First App Store submission guide |
+| `google_list_api_catalog` | read | **Every** androidpublisher v3 method |
+| `google_get_first_launch_checklist` | read | First Play deployment (API vs Console-only) |
 | `apple_get_version_review_info` | read | Review submission + contact details for a version |
 | `apple_list_version_review_info` | read | Review info for recent versions of an app |
 | `apple_api_call` | admin | Raw ASC API (`GET` free; writes need `confirm: true`) |
@@ -66,6 +79,10 @@ High-level release workflows. **`dryRun` defaults to `true`**.
 | `google_upload_internal_sharing_apk` | release | Internal App Sharing APK |
 | `google_upload_internal_sharing_bundle` | release | Internal App Sharing AAB |
 | `google_api_call` | admin | Raw Play API via dot notation (`get`/`list` free) |
+| `google_set_data_safety` | admin | Data Safety / Safety Labels declaration |
+| `google_get/refund_order` | admin | Orders + refunds |
+| `google_list_voided_purchases` | read | Voided purchases |
+| `google_upload_expansion_file` | admin | OBB expansion files |
 
 ## Apple — TestFlight & compliance (v1.0 highlights)
 

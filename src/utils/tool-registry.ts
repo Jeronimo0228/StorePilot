@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config, Toolset } from "./config.js";
 import { ToolError, toolErrorResult, toolTextResult } from "./errors.js";
+import { getProjectSession } from "../core/project-session.js";
 
 export type ToolCategory =
   | "read"
@@ -41,6 +42,12 @@ const DESTRUCTIVE_TOOLS = new Set([
   "apple_set_export_compliance",
   "apple_upload_screenshot",
   "apple_upload_screenshots",
+  "google_set_data_safety",
+  "google_upload_expansion_file",
+  "google_refund_order",
+  "google_create_user",
+  "google_delete_user",
+  "google_acknowledge_product_purchase",
 ]);
 
 const RELEASE_TOOLS = new Set([
@@ -63,11 +70,19 @@ const RELEASE_TOOLS = new Set([
   "get_release_snapshot",
   "explain_release_blockers",
   "load_project",
+  "select_project",
+  "resolve_project",
+  "get_active_project",
   "create_tester_group",
   "promote_release",
   "configure_rollout",
   "execute_release_intent",
   "list_projects",
+  "google_get_first_launch_checklist",
+  "apple_get_first_launch_checklist",
+  "google_list_api_catalog",
+  "apple_list_api_catalog",
+  "google_set_data_safety",
   "google_upload_bundle",
   "google_upload_apk",
   "google_upload_and_release",
@@ -191,8 +206,26 @@ export function createToolRegistrar(
           }
         : schema;
 
-      server.tool(name, description, finalSchema, async (args) => {
+      // Optional multi-project selector — injected on every tool so agents can
+      // target an app by name without restarting the MCP server.
+      const schemaWithProject = {
+        ...finalSchema,
+        project: z
+          .string()
+          .optional()
+          .describe(
+            "StorePilot project slug, display name, package, or Apple appId. Selects which storepilot.yaml IDs to use for this call.",
+          ),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      server.tool(name, description, schemaWithProject as any, async (rawArgs: any) => {
         try {
+          const args = rawArgs as Record<string, unknown> & {
+            confirm?: true;
+            project?: string;
+            dryRun?: boolean;
+          };
           const dryRun = hasDryRun && args.dryRun !== false;
           if (destructive && args.confirm !== true && !dryRun) {
             throw new ToolError(
@@ -203,8 +236,29 @@ export function createToolRegistrar(
             );
           }
 
-          const { confirm: _confirm, ...rest } = args;
-          return await handler(rest);
+          // `confirm` sigue llegando al handler: las herramientas de escape lo validan.
+          const { project, ...rest } = args;
+
+          const session = getProjectSession();
+          const profile = session.resolveForTool({
+            project: typeof project === "string" ? project : undefined,
+            configPath:
+              typeof rest.configPath === "string" ? rest.configPath : undefined,
+          });
+
+          // Selecting via `project` also switches the session active project
+          // so subsequent calls without project reuse the same app.
+          if (typeof project === "string" && project.trim() && profile) {
+            session.setActive(profile);
+          }
+
+          // Solo se inyectan los IDs que la herramienta declara; si no, terminan
+          // como atributos desconocidos en el cuerpo enviado a la tienda (409).
+          const withIds = session.injectStoreIds(rest, profile) as Record<string, unknown>;
+          const injected = Object.fromEntries(
+            Object.entries(withIds).filter(([key]) => key in rest || key in finalSchema),
+          );
+          return await handler(injected);
         } catch (err) {
           return toolErrorResult(err);
         }

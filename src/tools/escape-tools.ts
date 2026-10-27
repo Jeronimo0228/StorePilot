@@ -215,7 +215,8 @@ export function registerEscapeTools(
         const fnTyped = target[fn] as (
           args: Record<string, unknown>,
         ) => Promise<{ data: unknown }>;
-        const response = await fnTyped(params ?? {});
+        // googleapis methods read `this.context`; call them bound to their resource.
+        const response = await fnTyped.call(target, params ?? {});
         return toolSuccess({ resource, data: response?.data ?? response });
       },
       { categories: ["admin"] },

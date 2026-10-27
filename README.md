@@ -41,7 +41,7 @@
 | Apple *or* Google depth | **Both**, plus escape hatch for long tail |
 | No CI hooks | **EAS + GitHub webhooks** built in |
 
-~**131 typed tools** · **91 in `release` toolset** · App Store Connect · Google Play · provenance on npm
+~**150+ typed tools** · full Google Play v3 catalog via `google_api_call` · App Store Connect · multi-project · provenance on npm
 
 ## Golden path (StorePilot)
 
@@ -126,7 +126,10 @@ Credentials: [docs/CREDENTIALS.md](docs/CREDENTIALS.md) — EAS webhooks do **no
 - `get_release_snapshot` — production vs candidate, cross-platform blockers
 - `explain_release_blockers` — human-readable “what to do next”
 - `execute_release_intent` — rollout, promote, submit (dry-run default)
-- `list_projects` — multi-app registry via `STOREPILOT_PROJECTS_DIR`
+- `list_projects` / `select_project` / `resolve_project` / `get_active_project` — multi-app registry ([docs/MULTI_PROJECT.md](docs/MULTI_PROJECT.md))
+- `google_list_api_catalog` / `apple_list_api_catalog` — complete API surfaces
+- `google_get_first_launch_checklist` / `apple_get_first_launch_checklist` — first deployment guidance
+- Pass `project: "my-app"` on any tool to target that app's store IDs
 - `promote_release`, `configure_rollout`, `create_tester_group`
 
 ### Safety & ops
@@ -150,7 +153,8 @@ See [docs/TOOLS.md](docs/TOOLS.md) · [docs/COMPARISON.md](docs/COMPARISON.md)
 | Variable | Description |
 |---|---|
 | `STOREPILOT_CONFIG_PATH` | Path to `storepilot.yaml` |
-| `STOREPILOT_PROJECTS_DIR` | Directory of app repos for `list_projects` |
+| `STOREPILOT_PROJECTS` | JSON array or CSV of `storepilot.yaml` paths (multi-app) |
+| `STOREPILOT_PROJECTS_DIR` | Directory of app folders for `list_projects` |
 | `MCP_TOOLSET` | `release` (recommended), `readonly`, `all` |
 | `APPLE_*` / `GOOGLE_*` | Store API credentials — [CREDENTIALS.md](docs/CREDENTIALS.md) |
 | `EAS_PROJECT_MAPPINGS` | Map EAS project → store IDs for webhooks |

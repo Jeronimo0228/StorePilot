@@ -1,6 +1,6 @@
 {
   "name": "storepilot-mcp",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "StorePilot — MCP release orchestration for App Store Connect and Google Play (snapshot, blockers, dry-run intents)",
   "license": "MIT",
   "author": "Jerónimo Restrepo <jrestrepoa@eafit.edu.co>",
@@ -22,6 +22,7 @@
     "docs/GAP_ANALYSIS.md",
     "docs/DEMO.md",
     "docs/LAUNCH.md",
+    "docs/MULTI_PROJECT.md",
     "storepilot.example.yaml",
     ".env.example"
   ],

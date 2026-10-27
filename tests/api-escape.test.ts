@@ -38,4 +38,19 @@ describe("api-escape", () => {
     assert.doesNotThrow(() => assertGoogleMethod("list"));
     assert.throws(() => assertGoogleMethod("explode"));
   });
+
+  it("accepts camelCase Google methods as googleapis names them", () => {
+    assert.deepEqual(parseGoogleResource("monetization.subscriptions.batchMigratePrices").at(-1), "batchMigratePrices");
+    assert.doesNotThrow(() => assertGoogleMethod("batchUpdate"));
+    assert.doesNotThrow(() => assertGoogleMethod("addTargeting"));
+    assert.doesNotThrow(() => assertGoogleMethod("getExternalTransaction"));
+    assert.throws(() => parseGoogleResource("edits.tracks.list;drop"));
+    assert.throws(() => parseGoogleResource("Edits.tracks.list"));
+  });
+
+  it("treats batchGet as read and batch writes as writes", () => {
+    assert.equal(isGoogleWriteMethod("batchGet"), false);
+    assert.equal(isGoogleWriteMethod("batchUpdate"), true);
+    assert.equal(isGoogleWriteMethod("migratePrices"), true);
+  });
 });

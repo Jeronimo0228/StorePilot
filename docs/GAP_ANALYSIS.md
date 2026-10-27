@@ -1,7 +1,10 @@
 # API gap analysis
 
 Prioritized gaps vs. full App Store Connect + Google Play Developer API coverage.
-Goal: **~95% of real-world release value** without 300+ MCP tools.
+
+**As of v1.2.0:** every Android Publisher v3 method is reachable via `google_api_call` +
+`google_list_api_catalog`. Every ASC `/v1|/v2` path is reachable via `apple_api_call` +
+`apple_list_api_catalog`. Typed tools cover the golden path + first-launch + monetization extras.
 
 **Legend**
 
@@ -22,83 +25,67 @@ Goal: **~95% of real-world release value** without 300+ MCP tools.
 
 ---
 
-## Current coverage (v1.0.0)
+## Current coverage (v1.2.0)
 
 | Area | Apple | Google | Notes |
 |---|---|---|---|
-| Release & tracks | ~85% | ~80% | Orchestrator + upload-and-release workflow |
-| TestFlight / testers | ~75% | ~55% | Public link + groups |
-| Metadata & listings | ~55% | ~55% | Screenshots + compliance |
-| Reviews | ~45% | ~60% | List/reply + review info |
-| IAP / subscriptions | ~40% | ~45% | Subscriptions list/get (Google v2) |
-| Signing / devices | ~50% | N/A | Apple certs/profiles/devices |
-| Analytics / vitals | ~25% | ~0% | ASC analytics; Play Reporting via escape/plugin |
-| Escape hatch | ✅ | ✅ | Long-tail without tool explosion |
-| Orchestrator | ✅ | ✅ | Snapshot, intents, plugins, multi-project |
+| Release & tracks | ~90% | ~90% | Orchestrator + upload-and-release |
+| TestFlight / testers | ~80% | ~70% | Public link + groups |
+| Metadata & listings | ~70% | ~75% | Screenshots + contact/privacy URL |
+| First launch / policy | Partial | Partial | Checklists; Console-only forms documented |
+| Data Safety | N/A | ✅ typed | `google_set_data_safety` |
+| Reviews | ~50% | ~70% | List/reply + review info |
+| IAP / subscriptions | ~50% | ~70% | One-time products + offers + purchases |
+| Orders / refunds | N/A | ✅ typed | get / batch / refund / voided |
+| Signing / devices | ~60% | N/A | Apple certs/profiles/devices |
+| Analytics / vitals | ~30% | Escape | Play Reporting is a separate API product |
+| Escape hatch | ✅ | ✅ | Full surface |
+| Multi-project | ✅ | ✅ | `select_project` + `project` arg |
+| Orchestrator | ✅ | ✅ | Snapshot, intents, plugins |
 
 ---
 
-## Top 20 gaps (by impact)
+## Console-only (cannot be 100% API)
 
-| # | P | Platform | Gap | Strategy | Status |
-|---|---|---|---|---|---|
-| 1 | P0 | Google | Upload AAB/APK to edit | `google_upload_bundle` typed | v0.3.1 |
-| 2 | P0 | Apple | App Review submission + rejection detail | `apple_get_version_review_info` | v0.3.1 |
-| 3 | P0 | Both | Generic API for long tail | `apple_api_call`, `google_api_call` | v0.3.1 |
-| 4 | P0 | Apple | Screenshot / preview upload | Typed + binary helper | **v0.4.0** |
-| 5 | P0 | Google | Commit edit after upload workflow | `google_upload_and_release` | **v1.0.0** |
-| 6 | P1 | Apple | Export compliance + content rights on version | Typed patch fields | **v0.4.0** |
-| 7 | P1 | Google | Play Developer Reporting (crashes, ANR) | Plugin or escape | Backlog (escape) |
-| 8 | P1 | Google | Subscriptions catalog (`monetization.subscriptions`) | Typed list/get | **v1.0.0** |
-| 9 | P1 | Apple | Subscription pricing / localizations | Typed | Backlog |
-| 10 | P1 | Google | Internal app sharing | Typed upload | **v1.0.0** |
-| 11 | P1 | Apple | TestFlight public link + beta review detail | Typed | **v1.0.0** |
-| 12 | P1 | Google | Deobfuscation (ProGuard) file upload | Typed | **v1.0.0** |
-| 13 | P1 | Both | Multi-account / multi-app registry | `list_projects` | **v1.0.0** |
-| 14 | P2 | Apple | Custom Product Pages | Escape or plugin | Backlog |
-| 15 | P2 | Apple | In-App Events | Escape or plugin | Backlog |
-| 16 | P2 | Google | Orders / refunds API | Escape + docs | Backlog |
-| 17 | P2 | Apple | Game Center / App Clips | Plugin | Backlog |
-| 18 | P2 | Google | Expansion files / TV assets | Typed | Backlog |
-| 19 | P2 | Apple | Finance / sales reports | Separate toolset + role warning | Backlog |
-| 20 | P2 | Both | Video preview upload | Workflow + storage | Backlog |
+These remain Play Console / ASC UI (no public API). Documented by
+`google_get_first_launch_checklist` / `apple_get_first_launch_checklist`:
+
+- Google: content rating (IARC), ads declaration, target audience, news/COVID/gov apps, app access credentials, financial features
+- Apple: IPA binary upload (Transporter/EAS), agreements/tax/banking, full App Privacy nutrition labels (partial API)
 
 ---
 
-## Escape hatch safety (v0.3.1)
+## Remaining typed-tool backlog (P2 — escape already works)
+
+| # | Platform | Gap | Strategy |
+|---|---|---|---|
+| 1 | Google | Play Developer Reporting (crashes/ANR) | Separate client + scope |
+| 2 | Apple | Subscription pricing / localizations | Typed |
+| 3 | Apple | Custom Product Pages / In-App Events | Typed or escape |
+| 4 | Apple | Game Center / App Clips | Escape/plugin |
+| 5 | Apple | Finance / sales reports | Toolset + role warning |
+| 6 | Both | Video preview upload | Workflow + storage |
+
+---
+
+## Escape hatch safety
 
 ### `apple_api_call`
 
 - Path must match `^/v[12]/[\w./-]+$`
 - `GET` allowed without confirm
 - `POST`, `PATCH`, `DELETE` require `confirm: true`
-- No binary upload in escape hatch (use typed tools)
 
 ### `google_api_call`
 
-- Resource path like `edits.tracks.list` (dot notation under `androidpublisher`)
-- `get` / `list` allowed without confirm
+- Resource path like `edits.tracks.list` or `applications.dataSafety`
+- `get` / `list` / `batchget` allowed without confirm
 - Mutating methods require `confirm: true`
-- Params passed as JSON (no file streams — use typed upload tools)
 
 ---
 
-## Target tool counts
+## What “100%” means here
 
-| Milestone | Typed tools | Escape | Effective coverage |
-|---|---|---|---|
-| v0.3.0 | 107 | 0 | ~60% release value |
-| v0.3.1 | 111 | 2 | ~65% + long tail |
-| v0.4.0 | ~120 | 2 | ~80% release value |
-| v1.0.0 | ~135 | 2 + plugins | ~95% release value |
-
----
-
-## What we explicitly do NOT target
-
-- Full parity with 150-tool Google-only servers (reporting every Publisher method)
-- Every ASC finance endpoint
-- Play Billing real-time purchase APIs (different product surface)
-- Wrapper for every deprecated endpoint Apple/Google remove each year
-
-Use escape hatches + semver + smoke tests to stay current without tool explosion.
+1. **Every public Android Publisher v3 method** → typed OR `google_api_call`
+2. **Every ASC REST path** → typed OR `apple_api_call`
+3. **Honest Console-only list** for first-launch policy forms with no API

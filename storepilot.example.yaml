@@ -1,5 +1,6 @@
 # StorePilot project profile — copy to storepilot.yaml in your app repo root.
 # Golden path: docs/DEMO.md
+# Multi-app MCP: docs/MULTI_PROJECT.md (register many YAMLs; select by project name)
 
 project: my-app
 name: My App

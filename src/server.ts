@@ -8,6 +8,7 @@ import { registerEscapeTools } from "./tools/escape-tools.js";
 import { registerOrchestratorTools } from "./tools/orchestrator-tools.js";
 import { registerSharedTools } from "./tools/shared-tools.js";
 import { createToolRegistrar } from "./utils/tool-registry.js";
+import { initProjectSession } from "./core/project-session.js";
 import { logger } from "./utils/logger.js";
 
 declare const __APP_VERSION__: string;
@@ -17,6 +18,19 @@ export function createMcpServer(config: Config): McpServer {
     name: "storepilot-mcp",
     version: __APP_VERSION__,
   });
+
+  const session = initProjectSession(config.projectProfile);
+  const registered = session.list();
+  if (registered.length > 0) {
+    logger.info(
+      `Project registry: ${registered.length} app(s) — ${registered.map((p) => p.project).join(", ")}`,
+    );
+  }
+  if (session.getActive()) {
+    logger.info(
+      `Active project: ${session.getActive()!.project} (${session.getActive()!.configPath})`,
+    );
+  }
 
   const tool = createToolRegistrar(server, config);
 

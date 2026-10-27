@@ -230,13 +230,47 @@ export interface ProjectRegistryEntry {
   androidPackage?: string;
 }
 
+/** Carpeta base de StorePilot (registro de proyectos). STOREPILOT_HOME permite aislarla, p. ej. en pruebas. */
+export function storepilotHome(): string {
+  return process.env.STOREPILOT_HOME ? resolve(process.env.STOREPILOT_HOME) : join(homedir(), ".config", "storepilot");
+}
+
 function projectRegistryDirs(): string[] {
   const dirs = new Set<string>();
   if (process.env.STOREPILOT_PROJECTS_DIR) {
-    dirs.add(resolve(process.env.STOREPILOT_PROJECTS_DIR));
+    for (const part of process.env.STOREPILOT_PROJECTS_DIR.split(/[:;,]/)) {
+      const trimmed = part.trim();
+      if (trimmed) dirs.add(resolve(trimmed));
+    }
   }
-  dirs.add(join(homedir(), ".config", "storepilot", "projects"));
+  dirs.add(join(storepilotHome(), "projects"));
   return [...dirs];
+}
+
+/**
+ * Explicit project config paths from STOREPILOT_PROJECTS.
+ * Accepts JSON array of paths, or comma/colon/semicolon-separated paths.
+ */
+export function parseProjectsEnv(raw = process.env.STOREPILOT_PROJECTS): string[] {
+  if (!raw?.trim()) return [];
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+          .map((p) => resolve(p.trim()));
+      }
+    } catch {
+      // fall through to delimiter split
+    }
+  }
+  return trimmed
+    .split(/[,:;]/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => resolve(p));
 }
 
 export function listRegisteredProjects(
@@ -259,6 +293,17 @@ export function listRegisteredProjects(
     });
   };
 
+  // 1) Explicit paths from STOREPILOT_PROJECTS
+  for (const configPath of parseProjectsEnv()) {
+    try {
+      if (!existsSync(configPath)) continue;
+      addProfile(loadProjectProfile(configPath)!);
+    } catch {
+      // skip invalid
+    }
+  }
+
+  // 2) Subdirectories under STOREPILOT_PROJECTS_DIR / ~/.config/storepilot/projects
   for (const dir of projectRegistryDirs()) {
     if (!existsSync(dir)) continue;
     for (const item of readdirSync(dir, { withFileTypes: true })) {
@@ -272,8 +317,21 @@ export function listRegisteredProjects(
         // skip invalid profiles
       }
     }
+    // Also accept yaml files directly in the registry dir
+    for (const name of CONFIG_FILENAMES) {
+      // only flat filenames, not .storepilot/...
+      if (name.includes("/")) continue;
+      const flat = join(dir, name);
+      if (!existsSync(flat)) continue;
+      try {
+        addProfile(loadProjectProfile(flat)!);
+      } catch {
+        // skip
+      }
+    }
   }
 
+  // 3) Current / default single-project pointer
   const cwdConfig =
     process.env.STOREPILOT_CONFIG_PATH ?? findProjectConfigPath(startDir);
   if (cwdConfig && existsSync(cwdConfig)) {

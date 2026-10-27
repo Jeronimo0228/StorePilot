@@ -11,9 +11,13 @@ export function assertAppleApiPath(path: string): void {
   }
 }
 
-const GOOGLE_RESOURCE = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/;
-const GOOGLE_READ_METHODS = new Set(["get", "list"]);
-const GOOGLE_WRITE_METHODS = new Set([
+// Segmentos en camelCase como los nombra googleapis (batchUpdate, migratePrices); sin otros símbolos.
+const GOOGLE_RESOURCE = /^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$/;
+// Se comparan en minúsculas (assertGoogleMethod normaliza el nombre recibido).
+const lower = (names: string[]) => new Set(names.map((n) => n.toLowerCase()));
+
+const GOOGLE_READ_METHODS = lower(["get", "list", "batchGet", "getExternalTransaction"]);
+const GOOGLE_WRITE_METHODS = lower([
   "insert",
   "create",
   "update",
@@ -28,7 +32,24 @@ const GOOGLE_WRITE_METHODS = new Set([
   "defer",
   "revoke",
   "acknowledge",
-  "batchGet",
+  "batchDelete",
+  "batchUpdate",
+  "batchUpdateStates",
+  "batchMigratePrices",
+  "consume",
+  "refund",
+  "activate",
+  "deactivate",
+  "migratePrices",
+  "dataSafety",
+  "convertRegionPrices",
+  "addexternallyhosted",
+  "uploadapk",
+  "uploadbundle",
+  "createexternaltransaction",
+  "refundexternaltransaction",
+  "addTargeting",
+  "deploy",
 ]);
 
 export function parseGoogleResource(resource: string): string[] {
