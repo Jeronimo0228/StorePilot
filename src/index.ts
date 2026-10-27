@@ -11,16 +11,45 @@ import { registerResources } from "./resources/status.js";
 import { createHttpApp } from "./http/app.js";
 import { createWebhookApp } from "./webhook/handler.js";
 
+declare const __APP_VERSION__: string;
+
+const USAGE = `StorePilot ${__APP_VERSION__} — MCP server for App Store Connect and Google Play releases.
+
+It is meant to be launched by an MCP client (Claude Code, Claude Desktop, Cursor...):
+
+  claude mcp add storepilot -- npx -y storepilot-mcp@latest
+
+Credentials (environment variables, at least one store):
+  Apple:  APPLE_KEY_ID, APPLE_ISSUER_ID, APPLE_PRIVATE_KEY_PATH
+  Google: GOOGLE_SERVICE_ACCOUNT_KEY_PATH
+
+Options:
+  -h, --help     Show this help
+  -v, --version  Print the version
+
+Docs: https://github.com/Jeronimo0228/StorePilot#readme`;
+
 async function main() {
+  const args = process.argv.slice(2);
+  if (args.includes("--version") || args.includes("-v")) {
+    process.stdout.write(`${__APP_VERSION__}\n`);
+    return;
+  }
+  if (args.includes("--help") || args.includes("-h")) {
+    process.stdout.write(`${USAGE}\n`);
+    return;
+  }
+
   const config = loadConfig();
   const validation = validateConfig(config);
-  logConfigValidation(validation);
 
   if (!validation.valid) {
-    throw new Error(
-      `Configuration invalid:\n${validation.errors.map((e) => `- ${e}`).join("\n")}`,
+    process.stderr.write(
+      `StorePilot can't start:\n${validation.errors.map((e) => `- ${e}`).join("\n")}\n\n${USAGE}\n`,
     );
+    process.exit(1);
   }
+  logConfigValidation(validation);
 
   const mcpServer = createMcpServer(config);
   registerResources(mcpServer);

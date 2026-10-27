@@ -17,6 +17,9 @@ function shouldLog(level: LogLevel): boolean {
 function formatMessage(level: LogLevel, message: string, data?: unknown): string {
   const timestamp = new Date().toISOString();
   const base = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+  if (data instanceof Error) {
+    return `${base}: ${data.message}`;
+  }
   if (data !== undefined) {
     return `${base} ${JSON.stringify(data)}`;
   }
